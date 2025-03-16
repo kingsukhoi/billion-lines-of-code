@@ -16,7 +16,7 @@ func main() {
 
 	citiesArray := helpers.GetCities()
 
-	fileName := fmt.Sprintf("./weather_stations_go_%s.csv", time.Now().Format("2006-01-02-15-04-05"))
+	fileName := fmt.Sprintf("./ignored_dir/weather_stations_go_%s.csv", time.Now().Format("2006-01-02-15-04-05"))
 
 	file, err := os.Create(fileName)
 	if err != nil {
@@ -27,7 +27,7 @@ func main() {
 	var sb strings.Builder
 
 	for i := range 1000000000 {
-		writeMe := helpers.GenerateTemperatureLine(citiesArray)
+		writeMe := helpers.GenerateTemperatureLineCloudflare(citiesArray)
 		sb.WriteString(writeMe)
 		if i%10000000 == 0 {
 			_, errL := file.WriteString(sb.String())

@@ -10,20 +10,22 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
+var stations = make(map[string]*model.City)
+var mutex = &sync.Mutex{}
+
 func main() {
 	startTime := time.Now()
-	fmt.Println("Started at", startTime.Format(time.RFC822))
 
-	currFile := &fileIter.FileInfo{FilePath: "./ignored_dir/weather_stations_go_2025-03-14-21-28-48.csv"}
+	currFile := &fileIter.FileInfo{FilePath: "./ignored_dir/weather_stations_go_2024-11-25-12-09-08.csv"}
 	err := currFile.Open()
 	if err != nil {
 		log.Fatalf("Error opening file: %v", err)
 	}
 	defer currFile.Close()
-	stations := make(map[string]*model.City)
 
 	for _, v := range currFile.All() {
 		//isComment := strings.Index(v, "#")
@@ -37,27 +39,8 @@ func main() {
 			log.Fatalf("Error parsing float: %v", errL)
 		}
 		temperature := float32(temperatureTemp)
-		station, exists := stations[city]
 
-		if !exists {
-			//so the values ALWAYS get set on the first iteration
-			station = &model.City{
-				Name: city,
-				Min:  math.MaxFloat32,
-				Max:  -math.MaxFloat32,
-			}
-			stations[city] = station
-		}
-		if temperature < station.Min {
-			station.Min = temperature
-		}
-		if temperature > station.Max {
-			station.Max = temperature
-		}
-
-		station.MeanSum += temperature
-		station.Count++
-
+		go doMapStuff(city, temperature)
 	}
 
 	stationsArray := make([]*model.City, len(stations))
@@ -72,7 +55,7 @@ func main() {
 	})
 
 	var sb strings.Builder
-	sb.WriteString("Name, Min, Max, MeanSum, Count\n")
+	sb.WriteString(fmt.Sprintf("Name, Min, Max, MeanSum, Count\n"))
 	for _, v := range stationsArray {
 		sb.WriteString(fmt.Sprintf("%s,%.2f,%.2f,%.2f,%.0f\n", v.Name, v.Min, v.Max, v.MeanSum/v.Count, v.Count))
 	}
@@ -82,4 +65,32 @@ func main() {
 	_, _ = file.WriteString(sb.String())
 	_ = file.Sync()
 	_ = file.Close()
+
+}
+
+func doMapStuff(city string, temperature float32) {
+	mutex.Lock()
+
+	station, exists := stations[city]
+
+	if !exists {
+		//so the values ALWAYS get set on the first iteration
+		station = &model.City{
+			Name: city,
+			Min:  math.MaxFloat32,
+			Max:  -math.MaxFloat32,
+		}
+		stations[city] = station
+	}
+	if temperature < station.Min {
+		station.Min = temperature
+	}
+	if temperature > station.Max {
+		station.Max = temperature
+	}
+
+	station.MeanSum += temperature
+	station.Count++
+
+	mutex.Unlock()
 }
