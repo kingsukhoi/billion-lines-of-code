@@ -15,14 +15,14 @@ import (
 )
 
 var wg sync.WaitGroup
-var stations map[string]*model.City
-var stationsMutex sync.Mutex
+var cities map[string]*model.City
+var citiesMapLock sync.Mutex
 
 func main() {
 	startTime := time.Now()
 	fmt.Println("Started at", startTime.Format(time.RFC822))
 
-	stations = make(map[string]*model.City)
+	cities = make(map[string]*model.City)
 	currFile := &fileIter.FileInfo{FilePath: "./ignored_dir/weather_stations_go_2024-11-25-12-09-08.csv"}
 	err := currFile.Open()
 	if err != nil {
@@ -32,7 +32,7 @@ func main() {
 
 	fileLinesChannel := make(chan string, 1_000_000)
 
-	for range 1 {
+	for range 100 {
 		wg.Add(1)
 		go processCity(fileLinesChannel)
 	}
@@ -45,9 +45,9 @@ func main() {
 
 	wg.Wait()
 
-	stationsArray := make([]model.City, len(stations))
+	stationsArray := make([]model.City, len(cities))
 	i := 0
-	for _, v := range stations {
+	for _, v := range cities {
 		stationsArray[i] = *v
 		i++
 	}
@@ -81,9 +81,9 @@ func processCity(ch <-chan string) {
 		}
 		temperature := float32(temperatureTemp)
 
-		stationsMutex.Lock()
+		citiesMapLock.Lock()
 
-		station, exists := stations[city]
+		station, exists := cities[city]
 
 		if !exists {
 			//so the values ALWAYS get set on the first iteration
@@ -91,9 +91,14 @@ func processCity(ch <-chan string) {
 				Name: city,
 				Min:  math.MaxFloat32,
 				Max:  -math.MaxFloat32,
+				Lock: &sync.Mutex{},
 			}
-			stations[city] = station
+			cities[city] = station
 		}
+
+		station.Lock.Lock()
+		citiesMapLock.Unlock()
+
 		if temperature < station.Min {
 			station.Min = temperature
 		}
@@ -104,6 +109,6 @@ func processCity(ch <-chan string) {
 		station.MeanSum += temperature
 		station.Count++
 
-		stationsMutex.Unlock()
+		station.Lock.Unlock()
 	}
 }
